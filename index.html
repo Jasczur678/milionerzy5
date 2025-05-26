@@ -1,0 +1,494 @@
+
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Milionerzy: Układ Pokarmowy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .lifeline-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .answer-btn.correct {
+            animation: flash-green 1.5s forwards;
+        }
+        .answer-btn.incorrect-selected {
+            animation: flash-red 1.5s forwards;
+        }
+        @keyframes flash-green {
+            0%, 100% { background-color: #22c55e; color: white; } /* green-500 */
+            50% { background-color: #16a34a; color: white; } /* green-600 */
+        }
+        @keyframes flash-red {
+            0%, 100% { background-color: #ef4444; color: white; } /* red-500 */
+            50% { background-color: #dc2626; color: white; } /* red-600 */
+        }
+        .prize-item {
+            transition: all 0.3s ease-in-out;
+        }
+        .prize-item.current-question {
+            background-color: #f59e0b; /* amber-500 */
+            color: white;
+            transform: scale(1.05);
+        }
+        .prize-item.guaranteed {
+            font-weight: bold;
+            color: #ca8a04; /* amber-600 */
+        }
+        .modal {
+            display: none; /* Hidden by default */
+        }
+        .modal.active {
+            display: flex; /* Show when active */
+        }
+        /* Chart container styling */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px; /* max-w-md */
+            margin-left: auto;
+            margin-right: auto;
+            height: 250px; /* h-64 approx */
+            max-height: 300px;
+        }
+         /* Custom pulse for current question highlight */
+        .pulse-current {
+            animation: pulse-highlight 2s infinite;
+        }
+        @keyframes pulse-highlight {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); /* amber-500 with opacity */
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); /* amber-500 transparent */
+            }
+        }
+    </style>
+</head>
+<body class="bg-stone-900 text-stone-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div id="start-screen" class="text-center p-8 bg-stone-800 rounded-xl shadow-2xl">
+        <h1 class="text-5xl font-bold text-amber-400 mb-6">Milionerzy</h1>
+        <p class="text-xl text-stone-300 mb-8">Układ Pokarmowy - Edycja 2025</p>
+        <button id="start-game-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-8 rounded-lg text-xl transition duration-300 shadow-lg">
+            Rozpocznij Grę
+        </button>
+    </div>
+
+    <div id="game-screen" class="hidden w-full max-w-4xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-1 bg-stone-800 p-6 rounded-xl shadow-2xl flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-semibold text-amber-400 mb-6 text-center">Koła Ratunkowe</h2>
+                    <div class="space-y-3 mb-6">
+                        <button id="lifeline-5050" class="lifeline-btn w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 shadow-md flex items-center justify-center">
+                            <span class="mr-2">💡</span> 50:50
+                        </button>
+                        <button id="lifeline-phone" class="lifeline-btn w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 shadow-md flex items-center justify-center">
+                            <span class="mr-2">📞</span> Telefon do Przyjaciela
+                        </button>
+                        <button id="lifeline-audience" class="lifeline-btn w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 shadow-md flex items-center justify-center">
+                            <span class="mr-2">📊</span> Pytanie do Publiczności
+                        </button>
+                    </div>
+                </div>
+                <button id="walk-away-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-md mt-auto">
+                    Zrezygnuj z Gry
+                </button>
+            </div>
+
+            <div class="md:col-span-2 bg-stone-800 p-8 rounded-xl shadow-2xl">
+                <div id="question-container" class="mb-8">
+                    <p class="text-lg text-stone-400 mb-2">Pytanie <span id="question-number">1</span>/12 za <span id="question-prize" class="font-bold text-amber-400">500 zł</span></p>
+                    <h2 id="question-text" class="text-2xl md:text-3xl font-semibold text-stone-100 leading-tight min-h-[100px] flex items-center justify-center text-center">Ładowanie pytania...</h2>
+                </div>
+                <div id="answers-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    </div>
+            </div>
+        </div>
+         <div id="prize-ladder-container" class="mt-6 bg-stone-800 p-6 rounded-xl shadow-2xl w-full">
+            <h3 class="text-xl font-semibold text-amber-400 mb-4 text-center">Drabinka Nagród</h3>
+            <ol id="prize-ladder" class="space-y-1 text-right text-sm md:text-base">
+                </ol>
+        </div>
+    </div>
+
+    <div id="modal" class="modal fixed inset-0 bg-black bg-opacity-75 items-center justify-center p-4 z-50">
+        <div class="bg-stone-800 p-8 rounded-xl shadow-2xl max-w-lg w-full text-center">
+            <h3 id="modal-title" class="text-2xl font-bold text-amber-400 mb-6"></h3>
+            <div class="text-stone-200 mb-8">
+                <p id="modal-message-text" class="mb-4"></p> <div class="chart-container mx-auto" style="display: none;">
+                    <canvas id="audience-chart"></canvas>
+                </div>
+            </div>
+            <button id="modal-close-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300">OK</button>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            { question: "Który z poniższych narządów jest częścią układu pokarmowego?", options: [{ text: "Płuco" }, { text: "Serce" }, { text: "Żołądek", correct: true }, { text: "Mózg" }] },
+            { question: "Gdzie rozpoczyna się proces trawienia pokarmu?", options: [{ text: "W żołądku" }, { text: "W jelicie cienkim" }, { text: "W jamie ustnej", correct: true }, { text: "W przełyku" }] },
+            { question: "Jaka jest funkcja zębów w procesie trawienia?", options: [{ text: "Wchłanianie składników odżywczych" }, { text: "Mielenie i rozdrabnianie pokarmu", correct: true }, { text: "Produkcja enzymów trawiennych" }, { text: "Transport pokarmu do żołądka" }] },
+            { question: "Co pomaga pokarmowi przesuwać się przez przełyk do żołądka?", options: [{ text: "Grawitacja" }, { text: "Mięśnie przełyku", correct: true }, { text: "Powietrze" }, { text: "Woda" }] },
+            { question: "Którego rodzaju składniki pokarmowe są trawione w żołądku pod wpływem pepsyny?", options: [{ text: "Węglowodany" }, { text: "Tłuszcze" }, { text: "Białka", correct: true }, { text: "Witaminy" }] },
+            { question: "Jaki narząd produkuje żółć, która wspomaga trawienie tłuszczów w jelicie cienkim?", options: [{ text: "Trzustka" }, { text: "Wątroba", correct: true }, { text: "Śledziona" }, { text: "Nerka" }] },
+            { question: "W której części układu pokarmowego odbywa się główne wchłanianie strawionych składników odżywczych?", options: [{ text: "W żołądku" }, { text: "W jelicie grubym" }, { text: "W jelicie cienkim", correct: true }, { text: "W przełyku" }] },
+            { question: "Jaki narząd, oprócz funkcji trawiennych (produkcja enzymów), odgrywa kluczową rolę w regulacji poziomu cukru we krwi, produkując insulinę i glukagon?", options: [{ text: "Wątroba" }, { text: "Ślinianka" }, { text: "Trzustka", correct: true }, { text: "Pęcherzyk żółciowy" }] },
+            { question: "Czym jest proces wchłaniania w układzie pokarmowym?", options: [{ text: "Rozkładaniem dużych cząsteczek pokarmu na mniejsze." }, { text: "Przesuwaniem pokarmu przez przewód pokarmowy." }, { text: "Przenikaniem strawionych składników pokarmowych z przewodu pokarmowego do krwi lub limfy.", correct: true }, { text: "Usuwaniem niestrawionych resztek pokarmu z organizmu." }] },
+            { question: "Jaka jest rola błonnika pokarmowego (włókna pokarmowego) w diecie człowieka, mimo że nie jest on trawiony?", options: [{ text: "Jest głównym źródłem energii." }, { text: "Dostarcza witamin rozpuszczalnych w tłuszczach." }, { text: "Ułatwia przesuwanie się treści pokarmowej w jelitach, zapobiega zaparciom i sprzyja zdrowej florze bakteryjnej.", correct: true }, { text: "Pomaga wchłaniać tłuszcze." }] },
+            { question: "Dlaczego prawidłowo funkcjonująca mikroflora jelitowa (bakterie jelitowe) jest tak ważna dla zdrowia człowieka?", options: [{ text: "Odpowiada za produkcję kwasu solnego w żołądku." }, { text: "Uczestniczy w trawieniu niektórych składników pokarmowych, produkuje witaminy (np. K, B) i chroni przed patogenami.", correct: true }, { text: "Jest odpowiedzialna za ruchy perystaltyczne jelit." }, { text: "Jej główną rolą jest oczyszczanie krwi z toksyn." }] },
+            { question: "Jakie długoterminowe nawyki żywieniowe i styl życia mają największy wpływ na zdrowie całego układu pokarmowego i mogą zapobiegać wielu chorobom?", options: [{ text: "Spożywanie dużej ilości słodyczy i przetworzonej żywności, unikanie aktywności fizycznej." }, { text: "Picie dużej ilości napojów gazowanych i jedzenie nieregularnych posiłków." }, { text: "Stosowanie zróżnicowanej diety bogatej w warzywa, owoce i błonnik, picie odpowiedniej ilości wody, unikanie stresu i regularna aktywność fizyczna.", correct: true }, { text: "Jedzenie tylko jednego rodzaju pokarmu w dużych ilościach, np. wyłącznie białka." }] }
+        ];
+
+        const prizeLevels = [500, 1000, 2000, 5000, 10000, 20000, 40000, 75000, 125000, 250000, 500000, 1000000];
+        const guaranteedThresholds = [1000, 40000];
+
+        let currentQuestionIndex = 0;
+        let currentWinnings = 0;
+        let lifelines = { fiftyFifty: true, phone: true, audience: true };
+        let gameActive = false;
+        let audienceChart = null;
+
+        const startScreen = document.getElementById('start-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const startGameBtn = document.getElementById('start-game-btn');
+        
+        const questionNumberEl = document.getElementById('question-number');
+        const questionPrizeEl = document.getElementById('question-prize');
+        const questionTextEl = document.getElementById('question-text');
+        const answersContainerEl = document.getElementById('answers-container');
+        
+        const lifeline5050Btn = document.getElementById('lifeline-5050');
+        const lifelinePhoneBtn = document.getElementById('lifeline-phone');
+        const lifelineAudienceBtn = document.getElementById('lifeline-audience');
+        const walkAwayBtn = document.getElementById('walk-away-btn');
+
+        const prizeLadderEl = document.getElementById('prize-ladder');
+
+        const modalEl = document.getElementById('modal');
+        const modalTitleEl = document.getElementById('modal-title');
+        const modalMessageTextEl = document.getElementById('modal-message-text'); // New element
+        const chartContainerEl = modalMessageTextEl.nextElementSibling; // Reference to chart container
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const audienceChartCanvas = document.getElementById('audience-chart');
+
+        startGameBtn.addEventListener('click', startGame);
+        lifeline5050Btn.addEventListener('click', useFiftyFifty);
+        lifelinePhoneBtn.addEventListener('click', usePhoneAFriend);
+        lifelineAudienceBtn.addEventListener('click', useAskTheAudience);
+        walkAwayBtn.addEventListener('click', handleWalkAway);
+        modalCloseBtn.addEventListener('click', closeModal);
+
+        function updatePrizeLadder() {
+            prizeLadderEl.innerHTML = '';
+            prizeLevels.slice().reverse().forEach((prize, index) => {
+                const questionNum = prizeLevels.length - index;
+                const li = document.createElement('li');
+                li.classList.add('prize-item', 'p-2', 'rounded-md', 'bg-stone-700', 'shadow');
+                li.textContent = `${questionNum}. ${prize.toLocaleString()} zł`;
+                if (guaranteedThresholds.includes(prize)) {
+                    li.classList.add('guaranteed');
+                }
+                if (questionNum === currentQuestionIndex + 1 && gameActive) {
+                     li.classList.add('current-question', 'pulse-current');
+                }
+                 if (questionNum <= currentQuestionIndex && gameActive) {
+                    li.classList.add('text-green-400'); // Mark answered questions
+                }
+                prizeLadderEl.appendChild(li);
+            });
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            currentQuestionIndex = 0;
+            currentWinnings = 0;
+            lifelines = { fiftyFifty: true, phone: true, audience: true };
+            gameActive = true;
+            updateLifelineButtons();
+            loadQuestion();
+            updatePrizeLadder();
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIndex >= questions.length) {
+                gameOver(true); // Won the game
+                return;
+            }
+            gameActive = true; // Ensure game is active when loading a question
+            const currentQuestion = questions[currentQuestionIndex];
+            questionNumberEl.textContent = currentQuestionIndex + 1;
+            questionPrizeEl.textContent = `${prizeLevels[currentQuestionIndex].toLocaleString()} zł`;
+            questionTextEl.textContent = currentQuestion.question;
+            
+            answersContainerEl.innerHTML = '';
+            const optionLetters = ['A', 'B', 'C', 'D'];
+            // Shuffle options for display
+            const shuffledOptions = [...currentQuestion.options].sort(() => Math.random() - 0.5);
+
+            shuffledOptions.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.classList.add('answer-btn', 'w-full', 'bg-sky-700', 'hover:bg-sky-800', 'text-white', 'font-semibold', 'py-4', 'px-3', 'rounded-lg', 'transition', 'duration-300', 'shadow-md', 'text-left', 'min-h-[70px]', 'flex', 'items-center');
+                // For simplicity, we'll use A, B, C, D based on shuffled order
+                button.innerHTML = `<span class="bg-sky-900 text-amber-400 font-bold rounded-full h-8 w-8 flex items-center justify-center mr-3">${optionLetters[index]}</span> ${option.text}`;
+                button.dataset.correct = option.correct ? 'true' : 'false';
+                button.dataset.text = option.text; // Store original text if needed for 50:50
+                button.addEventListener('click', selectAnswer);
+                answersContainerEl.appendChild(button);
+            });
+            enableAnswerButtons();
+            updatePrizeLadder();
+        }
+        
+        function enableAnswerButtons(enable = true) {
+            document.querySelectorAll('.answer-btn').forEach(btn => btn.disabled = !enable);
+        }
+
+        function selectAnswer(event) {
+            enableAnswerButtons(false); // Disable buttons after selection
+            const selectedButton = event.currentTarget;
+            const isCorrect = selectedButton.dataset.correct === 'true';
+
+            if (isCorrect) {
+                selectedButton.classList.add('correct');
+                currentWinnings = prizeLevels[currentQuestionIndex];
+                 showModal("Poprawna odpowiedź!", `Gratulacje! Zdobywasz ${currentWinnings.toLocaleString()} zł.`);
+                setTimeout(() => {
+                    currentQuestionIndex++;
+                    if (currentQuestionIndex >= questions.length) {
+                        gameOver(true); // All questions answered correctly
+                    } else {
+                        closeModal(); // Close modal and then load next question
+                        loadQuestion();
+                    }
+                }, 2000); // 2-second delay for user to see feedback
+            } else {
+                selectedButton.classList.add('incorrect-selected');
+                // Highlight the correct answer
+                document.querySelectorAll('.answer-btn').forEach(btn => {
+                    if (btn.dataset.correct === 'true') {
+                        btn.classList.add('correct');
+                    }
+                });
+                setTimeout(() => gameOver(false), 2000); // 2-second delay before game over
+            }
+        }
+
+        function getGuaranteedWinnings() {
+            let lastGuaranteed = 0;
+            for(let i = currentQuestionIndex - 1; i >= 0; i--){ // Check previously answered questions
+                if(guaranteedThresholds.includes(prizeLevels[i])){
+                    lastGuaranteed = prizeLevels[i];
+                    break;
+                }
+            }
+            return lastGuaranteed;
+        }
+
+        function handleWalkAway() {
+            gameActive = false;
+            let winningsMessage;
+            if (currentQuestionIndex === 0) { // Walked away before answering Q1
+                winningsMessage = "Zdecydowałeś się zrezygnować. Niestety, nie wygrywasz nic tym razem.";
+                currentWinnings = 0;
+            } else {
+                 // Winnings are from the PREVIOUS correctly answered question
+                currentWinnings = prizeLevels[currentQuestionIndex - 1];
+                winningsMessage = `Zdecydowałeś się zrezygnować. Wygrywasz ${currentWinnings.toLocaleString()} zł.`;
+            }
+            showModal("Koniec Gry", winningsMessage, true);
+        }
+
+        function gameOver(isWinner) {
+            gameActive = false;
+            let finalWinnings;
+            let message;
+
+            if (isWinner) {
+                finalWinnings = prizeLevels[prizeLevels.length - 1];
+                message = `GRATULACJE! Wygrałeś MILION ZŁOTYCH!`;
+            } else {
+                // Player answered incorrectly
+                finalWinnings = getGuaranteedWinnings();
+                message = `Niestety, to była błędna odpowiedź. Koniec gry. Wygrywasz gwarantowane ${finalWinnings.toLocaleString()} zł.`;
+            }
+            currentWinnings = finalWinnings; // Update currentWinnings to reflect actual take-home
+            showModal("Koniec Gry", message, true);
+            updatePrizeLadder(); // Update ladder to show final state
+        }
+        
+        function updateLifelineButtons() {
+            lifeline5050Btn.disabled = !lifelines.fiftyFifty;
+            lifelinePhoneBtn.disabled = !lifelines.phone;
+            lifelineAudienceBtn.disabled = !lifelines.audience;
+        }
+
+        function useFiftyFifty() {
+            if (!lifelines.fiftyFifty || !gameActive) return;
+            lifelines.fiftyFifty = false;
+            updateLifelineButtons();
+
+            const currentQ = questions[currentQuestionIndex];
+            const correctAnswerText = currentQ.options.find(opt => opt.correct).text;
+            let incorrectOptions = currentQ.options.filter(opt => !opt.correct);
+            // Shuffle incorrect options and pick one to keep
+            incorrectOptions.sort(() => Math.random() - 0.5);
+            const oneIncorrectToKeep = incorrectOptions[0].text;
+
+            const answerButtons = document.querySelectorAll('.answer-btn');
+            let removedCount = 0;
+            answerButtons.forEach(btn => {
+                const optionText = btn.textContent.substring(btn.textContent.indexOf(' ') + 1).trim(); // Get text part
+                if (optionText !== correctAnswerText && optionText !== oneIncorrectToKeep) {
+                    if (removedCount < 2) {
+                        btn.style.visibility = 'hidden';
+                        btn.disabled = true;
+                        removedCount++;
+                    }
+                }
+            });
+        }
+
+        function usePhoneAFriend() {
+            if (!lifelines.phone || !gameActive) return;
+            lifelines.phone = false;
+            updateLifelineButtons();
+            
+            const correctAnswer = questions[currentQuestionIndex].options.find(opt => opt.correct).text;
+            // Find the letter corresponding to the correct answer
+            let correctLetter = '';
+            document.querySelectorAll('.answer-btn').forEach(btn => {
+                 const optionText = btn.textContent.substring(btn.textContent.indexOf(' ') + 1).trim();
+                 if (optionText === correctAnswer) {
+                     correctLetter = btn.textContent.substring(0, btn.textContent.indexOf(' ')).trim();
+                 }
+            });
+
+            showModal("Telefon do Przyjaciela", `Twój przyjaciel myśli, że poprawna odpowiedź to ${correctLetter}: "${correctAnswer}". Ale to tylko sugestia!`);
+            chartContainerEl.style.display = 'none'; // Ensure chart is hidden
+        }
+
+        function useAskTheAudience() {
+            if (!lifelines.audience || !gameActive) return;
+            lifelines.audience = false;
+            updateLifelineButtons();
+
+            const currentQ = questions[currentQuestionIndex];
+            const options = [];
+            document.querySelectorAll('.answer-btn').forEach(btn => {
+                if(btn.style.visibility !== 'hidden') { // Only consider visible options
+                    options.push({
+                        text: btn.textContent.substring(0, btn.textContent.indexOf(' ')).trim(), // Letter
+                        isCorrect: btn.dataset.correct === 'true'
+                    });
+                }
+            });
+
+            const votes = new Array(options.length).fill(0);
+            let totalVotes = 100;
+            let correctOptionIndex = options.findIndex(opt => opt.isCorrect);
+
+            // Give correct answer a higher chance
+            if (correctOptionIndex !== -1) {
+                votes[correctOptionIndex] = Math.floor(Math.random() * 31) + 50; // 50-80%
+                totalVotes -= votes[correctOptionIndex];
+            }
+            
+            // Distribute remaining votes
+            for (let i = 0; i < options.length; i++) {
+                if (i === correctOptionIndex) continue;
+                if (totalVotes <= 0) break;
+                const vote = (i === options.length - 1 || correctOptionIndex === options.length -1 && i === options.length -2) // if last option to assign votes or second to last if correct is last
+                           ? totalVotes 
+                           : Math.floor(Math.random() * (totalVotes / (options.length - votes.filter(v => v > 0).length)));
+                votes[i] += vote;
+                totalVotes -= vote;
+            }
+             // Ensure sum is 100 if small rounding errors
+            if(totalVotes > 0 && options.length > 0) votes[0]+=totalVotes;
+            if(totalVotes < 0 && options.length > 0) votes[0]+=totalVotes;
+
+
+            showModal("Pytanie do Publiczności", "Publiczność zagłosowała:");
+            chartContainerEl.style.display = 'block'; // Ensure chart is visible
+
+            if (audienceChart) {
+                audienceChart.destroy();
+            }
+            audienceChart = new Chart(audienceChartCanvas, {
+                type: 'bar',
+                data: {
+                    labels: options.map(opt => opt.text),
+                    datasets: [{
+                        label: '% Głosów',
+                        data: votes,
+                        backgroundColor: options.map(() => 'rgba(251, 191, 36, 0.7)'), // amber-400
+                        borderColor: options.map(() => 'rgba(251, 191, 36, 1)'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { color: '#e5e7eb' } // stone-200
+                        },
+                        x: {
+                            ticks: { color: '#e5e7eb' } // stone-200
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function showModal(title, content, isGameOverOrWalkAway = false) {
+            modalTitleEl.textContent = title;
+            modalMessageTextEl.textContent = content; // Always update text content
+
+            if (title === "Pytanie do Publiczności") {
+                 chartContainerEl.style.display = 'block';
+                 modalMessageTextEl.style.display = 'block'; // Ensure text is visible too
+            } else {
+                chartContainerEl.style.display = 'none';
+                modalMessageTextEl.style.display = 'block'; // Ensure text is visible
+            }
+            modalEl.classList.add('active');
+
+            if (isGameOverOrWalkAway) {
+                modalCloseBtn.textContent = "Zagraj Ponownie";
+                modalCloseBtn.onclick = () => { closeModal(); startGame(); };
+            } else {
+                modalCloseBtn.textContent = "OK";
+                modalCloseBtn.onclick = closeModal;
+            }
+        }
+
+        function closeModal() {
+            modalEl.classList.remove('active');
+            if (gameActive) { // Re-enable answer buttons if game is still on (e.g. after phone a friend)
+                enableAnswerButtons();
+            }
+        }
+        
+        // Initial setup
+        updatePrizeLadder(); // Show initial ladder
+
+    </script>
+</body>
+</html>
